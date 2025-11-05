@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 #!/bin/bash
 # manage_users.sh
 # Interactively review and manage local and admin users.
@@ -43,18 +42,6 @@ for user in "${local_users[@]}"; do
     fi
     echo
 done
-
-    # Quick environment checks (helpful for Mint 21)
-    if [[ "$(uname -s)" != "Linux" ]]; then
-        echo "This script is intended for Linux systems (tested on Mint/Ubuntu). Exiting."
-        exit 1
-    fi
-
-    # Ensure dpkg/apt are available
-    if ! command -v dpkg >/dev/null 2>&1 || ! command -v apt-get >/dev/null 2>&1; then
-        echo "Required package tools (dpkg/apt-get) not found. Ensure you're running on Debian/Ubuntu-based Linux." 
-        exit 1
-    fi
 
     # --- Step 2: Process administrators ---
     echo "=== Administrator Review ==="
