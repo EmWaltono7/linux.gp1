@@ -335,11 +335,13 @@ disable_service() {
 disable_service "nginx"
 disable_service "ircd"
 disable_service "smbd"
+disable_service "apache2"
+disable_service "rsync"
 
 # Verify status
 echo
 echo "=== Service Status Verification ==="
-for svc in nginx ircd smbd; do
+for svc in nginx ircd smbd apache2 rsync; do
     if systemctl is-enabled "$svc" &>/dev/null; then
         echo "⚠️  $svc is still enabled!"
     else
@@ -565,7 +567,7 @@ echo
 echo "=== Removing Unwanted Packages ==="
 echo
 
-unwanted=(hydra nbtscan p0f manaplus packit)
+unwanted=(hydra nbtscan p0f manaplus packit wapiti)
 installed=()
 
 # Detect which unwanted packages are installed
@@ -816,4 +818,97 @@ echo " - Login grace time limited to 30 seconds"
 echo " - Max authentication attempts set to 3"
 echo
 
+# --- Step 13: Application Security Settings ---
+echo "=== Step 13: Configuring Application Security Settings ==="
+echo
+
+# FTP Security Configuration
+echo "[+] Configuring FTP Security Settings..."
+
+# Check if vsftpd is installed
+if ! command -v vsftpd >/dev/null 2>&1; then
+    echo "⚠️ vsftpd is not installed. Installing..."
+    sudo apt-get update
+    sudo apt-get install -y vsftpd openssl
+fi
+
+# Backup original config
+vsftpd_conf="/etc/vsftpd.conf"
+backup_date=$(date +%F-%H%M%S)
+if [[ -f "$vsftpd_conf" ]]; then
+    echo "[+] Backing up original vsftpd configuration..."
+    sudo cp "$vsftpd_conf" "${vsftpd_conf}.backup-${backup_date}"
+fi
+
+# Generate SSL certificate if it doesn't exist
+ssl_cert_dir="/etc/ssl/private"
+ssl_cert="${ssl_cert_dir}/vsftpd.pem"
+if [[ ! -f "$ssl_cert" ]]; then
+    echo "[+] Generating SSL certificate for FTP..."
+    sudo mkdir -p "$ssl_cert_dir"
+    sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+        -keyout "$ssl_cert" -out "$ssl_cert" \
+        -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost" \
+        2>/dev/null
+    # Ensure vsftpd group exists
+    sudo groupadd -f vsftpd
+    # Set proper ownership and permissions
+    sudo chown root:vsftpd "$ssl_cert"
+    sudo chmod 640 "$ssl_cert"  # Only root can write, group (vsftpd) can read
+fi
+
+# Configure vsftpd with secure settings
+echo "[+] Applying secure FTP configuration..."
+cat <<EOF | sudo tee "$vsftpd_conf" >/dev/null
+# Security Settings
+anonymous_enable=NO
+local_enable=YES
+write_enable=YES
+local_umask=022
+
+# SSL Configuration
+ssl_enable=YES
+allow_anon_ssl=NO
+force_local_data_ssl=YES
+force_local_logins_ssl=YES
+ssl_tlsv1=YES
+ssl_sslv2=NO
+ssl_sslv3=NO
+rsa_cert_file=$ssl_cert
+rsa_private_key_file=$ssl_cert
+
+# Additional Security Measures
+chroot_local_user=YES
+allow_writeable_chroot=NO
+passwd_chroot_enable=YES
+secure_chroot_dir=/var/run/vsftpd/empty
+
+# Connection Settings
+connect_from_port_20=YES
+listen=YES
+pam_service_name=vsftpd
+userlist_enable=YES
+userlist_deny=YES
+max_clients=10
+max_per_ip=5
+EOF
+
+# Create required directories
+sudo mkdir -p /var/run/vsftpd/empty
+
+# Restart vsftpd service
+echo "[+] Restarting FTP service..."
+sudo systemctl restart vsftpd || true
+
+# Verify settings
+echo
+echo "✅ FTP security settings applied successfully:"
+echo " - Anonymous access disabled"
+echo " - SSL/TLS encryption enabled and required"
+echo " - Chroot jail enabled for local users"
+echo " - Secure default configurations applied"
+echo " - Connection limits enforced"
+echo
+
 #Hello
+#New
